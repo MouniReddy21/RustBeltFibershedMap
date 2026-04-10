@@ -12,7 +12,7 @@ AS $$
 DECLARE
 	admin_claim TEXT;
 BEGIN
-	admin_claim := COALESCE(auth.jwt() ->> 'is_admin', 'false');
+	admin_claim := COALESCE(auth.jwt() -> 'app_metadata' ->> 'is_admin', 'false');
 	RETURN lower(admin_claim) IN ('true', 't', '1', 'yes');
 END;
 $$;

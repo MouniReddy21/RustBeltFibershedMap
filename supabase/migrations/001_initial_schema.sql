@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS organizations (
 
 	full_name TEXT NOT NULL,
 	business_name TEXT NOT NULL,
-	short_bio TEXT NOT NULL CHECK (char_length(short_bio) <= 150),
+	short_bio TEXT NOT NULL CHECK (char_length(short_bio) <= 500),
 
 	email TEXT NOT NULL CHECK (position('@' in email) > 1),
 	phone TEXT,

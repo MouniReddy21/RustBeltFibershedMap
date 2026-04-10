@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { toMapMarkerPayload } from "@/lib/mapbox/map-data";
+import { producerTypeMatches, normalizeProducerType } from "@/lib/producer-types";
 import type { DirectoryListing } from "@/lib/types";
 
 function normalizeFibers(profile: Record<string, unknown> | null): string[] {
@@ -80,7 +81,7 @@ export async function GET(request: Request) {
         short_bio: String(listing.short_bio ?? ""),
         city: String(listing.city ?? ""),
         state: String(listing.state ?? ""),
-        producer_type: String(listing.producer_type ?? "N/A"),
+        producer_type: normalizeProducerType(String(listing.producer_type ?? "")),
         lat: typeof listing.lat === "number" ? listing.lat : null,
         lng: typeof listing.lng === "number" ? listing.lng : null,
         status: "approved",
@@ -102,7 +103,7 @@ export async function GET(request: Request) {
           .toLowerCase()
           .includes(q.toLowerCase());
       const cityMatch = !city || listing.city.toLowerCase().includes(city.toLowerCase());
-      const producerMatch = !producerType || listing.producer_type === producerType;
+      const producerMatch = producerTypeMatches(listing.producer_type, producerType);
       const wasteWoolMatch = !wasteWoolOnly || listing.waste_wool_avail;
       const universityMatch = !universityOnly || listing.is_university;
       const fiberMatch = !fiber || listing.fibers.some((item) => item.includes(fiber));

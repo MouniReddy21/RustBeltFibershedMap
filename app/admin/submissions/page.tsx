@@ -1,5 +1,6 @@
 import ReviewControls from "./review-controls";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { requireAdmin } from "@/lib/supabase/require-admin";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -62,6 +63,7 @@ async function getSubmissions(): Promise<SubmissionRow[]> {
 }
 
 export default async function AdminSubmissionsPage() {
+  await requireAdmin();
   const submissions = await getSubmissions();
 
   return (
@@ -99,6 +101,11 @@ export default async function AdminSubmissionsPage() {
                   <p style={{ margin: "0 0 0.65rem", fontSize: "0.9rem", color: "var(--muted)" }}>
                     Contact: {org.full_name} ({org.email})
                   </p>
+                  <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.75rem" }}>
+                    <Link className="btn secondary" href={`/admin/submissions/${submission.id}`}>
+                      Open review
+                    </Link>
+                  </div>
                   <ReviewControls approvalId={submission.id} />
                 </article>
               );

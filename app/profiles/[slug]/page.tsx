@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import RelayForm from "./relay-form";
+import MiniMap from "./mini-map";
 
 type Props = {
   params: Promise<{ slug: string }>;
@@ -15,10 +16,13 @@ export default async function ProfilePage({ params }: Props) {
     notFound();
   }
 
+  const { data: authResult } = await supabase.auth.getUser();
+  const currentUserId = authResult.user?.id ?? null;
+
   const { data: org } = await supabase
     .from("organizations")
     .select(
-      "id, business_name, short_bio, city, county, state, producer_type, website, instagram, phone, public_contact, location_privacy_level, lat, lng, status"
+      "id, auth_user_id, business_name, short_bio, city, county, state, producer_type, website, instagram, phone, public_contact, location_privacy_level, lat, lng, status"
     )
     .eq("profile_slug", slug)
     .eq("status", "approved")
@@ -42,6 +46,7 @@ export default async function ProfilePage({ params }: Props) {
     .order("posted_at", { ascending: false })
     .limit(20);
 
+  const isOwner = currentUserId !== null && currentUserId === org.auth_user_id;
   const mapLat = org.location_privacy_level === "city_only" ? null : org.lat;
   const mapLng = org.location_privacy_level === "city_only" ? null : org.lng;
   const shareUrl = `/profiles/${slug}`;
@@ -70,20 +75,53 @@ export default async function ProfilePage({ params }: Props) {
       </div>
 
       <div className="card" style={{ marginBottom: "1rem" }}>
-        <h2 style={{ marginTop: 0 }}>Mini-map location</h2>
+        <h2 style={{ marginTop: 0, marginBottom: "0.75rem" }}>Location</h2>
         {mapLat !== null && mapLng !== null ? (
-          <p style={{ marginBottom: 0 }}>
-            Exact map pin available at {mapLat.toFixed(4)}, {mapLng.toFixed(4)}.
-          </p>
+          <>
+            <MiniMap lat={mapLat} lng={mapLng} label={org.business_name} />
+            <div style={{ marginTop: "0.6rem", display: "flex", gap: "0.5rem", alignItems: "center" }}>
+              <Link
+                className="btn secondary"
+                href={`/map`}
+                style={{ fontSize: "0.85rem", padding: "0.4rem 0.8rem" }}
+              >
+                View on full map
+              </Link>
+              <span style={{ fontSize: "0.8rem", color: "var(--muted)" }}>
+                {org.city}{org.county ? `, ${org.county} County` : ""}, {org.state}
+              </span>
+            </div>
+          </>
         ) : (
-          <p style={{ marginBottom: 0 }}>
-            This member chose city-level privacy. Map displays city or county context only.
+          <p style={{ marginBottom: 0, color: "var(--muted)" }}>
+            {org.city}{org.county ? `, ${org.county} County` : ""}, {org.state} — this member
+            shows location at city level only.
           </p>
         )}
       </div>
 
       <div className="card" style={{ marginBottom: "1rem" }}>
-        <h2 style={{ marginTop: 0 }}>Exchange board posts</h2>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: "0.5rem",
+            marginBottom: exchangePosts && exchangePosts.length > 0 ? "0.75rem" : 0,
+          }}
+        >
+          <h2 style={{ margin: 0 }}>Exchange board posts</h2>
+          {isOwner ? (
+            <Link
+              className="btn secondary"
+              href="/exchange/manage"
+              style={{ fontSize: "0.85rem", padding: "0.4rem 0.8rem" }}
+            >
+              {exchangePosts && exchangePosts.length > 0 ? "Manage posts" : "+ Add a post"}
+            </Link>
+          ) : null}
+        </div>
         {exchangePosts && exchangePosts.length > 0 ? (
           <div style={{ display: "grid", gap: "0.75rem" }}>
             {exchangePosts.map((post) => (
@@ -104,8 +142,20 @@ export default async function ProfilePage({ params }: Props) {
               </article>
             ))}
           </div>
+        ) : isOwner ? (
+          <div style={{ paddingTop: "0.75rem" }}>
+            <p style={{ margin: "0 0 0.75rem", color: "var(--muted)", fontSize: "0.95rem" }}>
+              You don&apos;t have any active exchange posts yet. Let the community know what
+              you have or what you&apos;re looking for.
+            </p>
+            <Link className="btn" href="/exchange/manage">
+              Post to the Exchange Board
+            </Link>
+          </div>
         ) : (
-          <p style={{ marginBottom: 0 }}>No active exchange posts yet.</p>
+          <p style={{ marginBottom: 0, marginTop: "0.5rem", color: "var(--muted)" }}>
+            No active exchange posts yet.
+          </p>
         )}
       </div>
 

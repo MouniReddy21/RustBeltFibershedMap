@@ -1,11 +1,31 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { ExchangePost, ExchangePostStatus, ExchangePostType } from "@/lib/types";
+
+const FIBER_CATEGORIES = [
+  "Sheep Wool",
+  "Waste Wool",
+  "Alpaca",
+  "Mohair",
+  "Angora",
+  "Cashmere",
+  "Llama",
+  "Cotton",
+  "Flax / Linen",
+  "Hemp",
+  "Nettle",
+  "Blended / Mixed",
+  "Other",
+] as const;
+
+const MAX_PHOTOS = 3;
 
 type Props = {
   initialPosts: ExchangePost[];
+  orgId: string;
 };
 
 type FormState = {
@@ -17,6 +37,7 @@ type FormState = {
   quantity: string;
   priceOrTradeTerms: string;
   expiresAt: string;
+  photoUrls: string[];
 };
 
 function toDateInput(value: string): string {
@@ -40,15 +61,18 @@ const emptyForm: FormState = {
   materialType: "",
   quantity: "",
   priceOrTradeTerms: "",
-  expiresAt: ""
+  expiresAt: "",
+  photoUrls: [],
 };
 
-export default function ManageExchangeClient({ initialPosts }: Props) {
+export default function ManageExchangeClient({ initialPosts, orgId }: Props) {
   const [posts, setPosts] = useState<ExchangePost[]>(initialPosts);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [notice, setNotice] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const activeCount = useMemo(() => posts.filter((post) => post.status === "active").length, [posts]);
 
@@ -62,14 +86,69 @@ export default function ManageExchangeClient({ initialPosts }: Props) {
       materialType: post.material_type ?? "",
       quantity: post.quantity ?? "",
       priceOrTradeTerms: post.price_or_trade_terms ?? "",
-      expiresAt: toDateInput(post.expires_at)
+      expiresAt: toDateInput(post.expires_at),
+      photoUrls: post.photo_urls ?? [],
     });
     setNotice("");
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function resetForm() {
     setEditingId(null);
     setForm(emptyForm);
+    setNotice("");
+  }
+
+  async function handlePhotoSelect(event: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []);
+    if (!files.length) return;
+
+    const remaining = MAX_PHOTOS - form.photoUrls.length;
+    const toUpload = files.slice(0, remaining);
+
+    if (toUpload.length === 0) {
+      setNotice(`Maximum ${MAX_PHOTOS} photos allowed.`);
+      return;
+    }
+
+    setUploadingPhoto(true);
+    setNotice("");
+
+    const supabase = createSupabaseBrowserClient();
+    const uploaded: string[] = [];
+
+    for (const file of toUpload) {
+      const ext = file.name.split(".").pop() ?? "jpg";
+      const path = `${orgId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+
+      const { error } = await supabase.storage.from("exchange-photos").upload(path, file, {
+        cacheControl: "3600",
+        upsert: false,
+      });
+
+      if (error) {
+        setNotice("One or more photos failed to upload. Please try again.");
+        break;
+      }
+
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from("exchange-photos").getPublicUrl(path);
+
+      uploaded.push(publicUrl);
+    }
+
+    setUploadingPhoto(false);
+    if (uploaded.length > 0) {
+      setForm((prev) => ({ ...prev, photoUrls: [...prev.photoUrls, ...uploaded] }));
+    }
+
+    // Reset the file input so the same file can be re-selected if needed
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  function removePhoto(url: string) {
+    setForm((prev) => ({ ...prev, photoUrls: prev.photoUrls.filter((u) => u !== url) }));
   }
 
   async function savePost() {
@@ -86,14 +165,15 @@ export default function ManageExchangeClient({ initialPosts }: Props) {
       materialType: form.materialType || undefined,
       quantity: form.quantity || undefined,
       priceOrTradeTerms: form.priceOrTradeTerms || undefined,
-      expiresAt: toApiDate(form.expiresAt)
+      expiresAt: toApiDate(form.expiresAt),
+      photoUrls: form.photoUrls,
     };
     const payload = isEdit ? basePayload : { ...basePayload, postType: form.postType };
 
     const response = await fetch(endpoint, {
       method,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
     });
 
     const json = (await response.json().catch(() => null)) as { error?: string; post?: ExchangePost } | null;
@@ -105,9 +185,7 @@ export default function ManageExchangeClient({ initialPosts }: Props) {
     }
 
     setPosts((current) => {
-      if (!isEdit) {
-        return [json.post as ExchangePost, ...current];
-      }
+      if (!isEdit) return [json.post as ExchangePost, ...current];
       return current.map((post) => (post.id === editingId ? (json.post as ExchangePost) : post));
     });
 
@@ -120,7 +198,7 @@ export default function ManageExchangeClient({ initialPosts }: Props) {
     const response = await fetch(`/api/exchange/posts/${postId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status })
+      body: JSON.stringify({ status }),
     });
 
     const json = (await response.json().catch(() => null)) as { error?: string; post?: ExchangePost } | null;
@@ -141,103 +219,232 @@ export default function ManageExchangeClient({ initialPosts }: Props) {
       return;
     }
     setPosts((current) => current.filter((post) => post.id !== postId));
-    if (editingId === postId) {
-      resetForm();
-    }
+    if (editingId === postId) resetForm();
     setNotice("Post deleted.");
   }
+
+  const inputStyle = {
+    width: "100%",
+    marginTop: "0.2rem",
+    padding: "0.6rem",
+    borderRadius: "8px",
+    border: "1px solid var(--border)",
+    boxSizing: "border-box" as const,
+  };
 
   return (
     <div style={{ display: "grid", gap: "1rem" }}>
       <div className="card">
         <p style={{ marginTop: 0 }}>
-          <strong>{activeCount}</strong> active posts
+          <strong>{activeCount}</strong> active {activeCount === 1 ? "post" : "posts"}
         </p>
         <p style={{ marginBottom: 0 }}>
           Need inspiration? Open the <Link href="/exchange">public Exchange Board</Link> to see nearby listings.
         </p>
       </div>
 
+      {/* Create / Edit form */}
       <div className="card">
         <h2 style={{ marginTop: 0 }}>{editingId ? "Edit exchange post" : "Create exchange post"}</h2>
         <div style={{ display: "grid", gap: "0.6rem" }}>
+
+          {/* Post type */}
           <label>
             Post type
             <select
               value={form.postType}
               disabled={Boolean(editingId)}
-              onChange={(event) => setForm((prev) => ({ ...prev, postType: event.target.value as ExchangePostType }))}
-              style={{ width: "100%", marginTop: "0.2rem", padding: "0.6rem", borderRadius: "8px", border: "1px solid var(--border)" }}
+              onChange={(e) => setForm((prev) => ({ ...prev, postType: e.target.value as ExchangePostType }))}
+              style={inputStyle}
             >
               <option value="offering">I have</option>
               <option value="wanted">I need</option>
             </select>
           </label>
+
+          {/* Title */}
           <label>
             Title
             <input
               value={form.title}
               maxLength={140}
-              onChange={(event) => setForm((prev) => ({ ...prev, title: event.target.value }))}
-              style={{ width: "100%", marginTop: "0.2rem", padding: "0.6rem", borderRadius: "8px", border: "1px solid var(--border)" }}
+              placeholder="e.g. 300 lbs raw Rambouillet fleece available"
+              onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))}
+              style={inputStyle}
             />
           </label>
+
+          {/* Description */}
           <label>
             Description
             <textarea
               rows={4}
               value={form.description}
               maxLength={2000}
-              onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))}
-              style={{ width: "100%", marginTop: "0.2rem", padding: "0.6rem", borderRadius: "8px", border: "1px solid var(--border)" }}
+              placeholder="Any extra details about condition, shearing date, pickup or shipping options..."
+              onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
+              style={{ ...inputStyle, resize: "vertical" }}
             />
           </label>
+
+          {/* Fiber category + Material type */}
           <div style={{ display: "grid", gap: "0.6rem", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
             <label>
               Fiber category
-              <input
+              <select
                 value={form.fiberCategory}
-                onChange={(event) => setForm((prev) => ({ ...prev, fiberCategory: event.target.value }))}
-                style={{ width: "100%", marginTop: "0.2rem", padding: "0.6rem", borderRadius: "8px", border: "1px solid var(--border)" }}
-              />
+                onChange={(e) => setForm((prev) => ({ ...prev, fiberCategory: e.target.value }))}
+                style={inputStyle}
+              >
+                <option value="">Select category</option>
+                {FIBER_CATEGORIES.map((cat) => (
+                  <option key={cat} value={cat}>
+                    {cat}
+                  </option>
+                ))}
+              </select>
             </label>
+
             <label>
               Material type
               <input
                 value={form.materialType}
-                onChange={(event) => setForm((prev) => ({ ...prev, materialType: event.target.value }))}
-                style={{ width: "100%", marginTop: "0.2rem", padding: "0.6rem", borderRadius: "8px", border: "1px solid var(--border)" }}
+                placeholder="e.g. raw fleece, roving, yarn"
+                onChange={(e) => setForm((prev) => ({ ...prev, materialType: e.target.value }))}
+                style={inputStyle}
               />
             </label>
+
             <label>
               Quantity (optional)
               <input
                 value={form.quantity}
-                onChange={(event) => setForm((prev) => ({ ...prev, quantity: event.target.value }))}
-                style={{ width: "100%", marginTop: "0.2rem", padding: "0.6rem", borderRadius: "8px", border: "1px solid var(--border)" }}
+                placeholder="e.g. 300 lbs, 10 bags"
+                onChange={(e) => setForm((prev) => ({ ...prev, quantity: e.target.value }))}
+                style={inputStyle}
               />
             </label>
+
             <label>
               Expires on
               <input
                 type="date"
                 value={form.expiresAt}
-                onChange={(event) => setForm((prev) => ({ ...prev, expiresAt: event.target.value }))}
-                style={{ width: "100%", marginTop: "0.2rem", padding: "0.6rem", borderRadius: "8px", border: "1px solid var(--border)" }}
+                onChange={(e) => setForm((prev) => ({ ...prev, expiresAt: e.target.value }))}
+                style={inputStyle}
               />
             </label>
           </div>
+
+          {/* Price / trade terms */}
           <label>
             Price or trade terms
             <input
               value={form.priceOrTradeTerms}
-              onChange={(event) => setForm((prev) => ({ ...prev, priceOrTradeTerms: event.target.value }))}
-              style={{ width: "100%", marginTop: "0.2rem", padding: "0.6rem", borderRadius: "8px", border: "1px solid var(--border)" }}
+              placeholder="e.g. $2/lb, open to trade, free to good home"
+              onChange={(e) => setForm((prev) => ({ ...prev, priceOrTradeTerms: e.target.value }))}
+              style={inputStyle}
             />
           </label>
 
+          {/* Photo upload */}
+          <div>
+            <p style={{ margin: "0 0 0.4rem", fontWeight: 500, fontSize: "0.9rem" }}>
+              Photos{" "}
+              <span style={{ fontWeight: 400, color: "var(--muted)" }}>
+                (up to {MAX_PHOTOS}, optional)
+              </span>
+            </p>
+
+            {form.photoUrls.length > 0 ? (
+              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.5rem" }}>
+                {form.photoUrls.map((url) => (
+                  <div key={url} style={{ position: "relative" }}>
+                    <img
+                      src={url}
+                      alt=""
+                      style={{
+                        width: "80px",
+                        height: "80px",
+                        objectFit: "cover",
+                        borderRadius: "6px",
+                        border: "1px solid var(--border)",
+                        display: "block",
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removePhoto(url)}
+                      aria-label="Remove photo"
+                      style={{
+                        position: "absolute",
+                        top: "-6px",
+                        right: "-6px",
+                        width: "20px",
+                        height: "20px",
+                        borderRadius: "50%",
+                        background: "#c0392b",
+                        color: "#fff",
+                        border: "none",
+                        cursor: "pointer",
+                        fontSize: "0.7rem",
+                        lineHeight: 1,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        padding: 0,
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+            {form.photoUrls.length < MAX_PHOTOS ? (
+              <>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  disabled={uploadingPhoto}
+                  onChange={handlePhotoSelect}
+                  style={{ display: "none" }}
+                  id="photo-upload"
+                />
+                <label
+                  htmlFor="photo-upload"
+                  className="btn secondary"
+                  style={{
+                    display: "inline-block",
+                    cursor: uploadingPhoto ? "wait" : "pointer",
+                    opacity: uploadingPhoto ? 0.6 : 1,
+                    fontSize: "0.9rem",
+                  }}
+                >
+                  {uploadingPhoto ? "Uploading..." : "Add photo"}
+                </label>
+                <span style={{ marginLeft: "0.5rem", fontSize: "0.8rem", color: "var(--muted)" }}>
+                  JPG, PNG, WEBP · max 5 MB each
+                </span>
+              </>
+            ) : (
+              <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--muted)" }}>
+                Maximum {MAX_PHOTOS} photos reached.
+              </p>
+            )}
+          </div>
+
+          {/* Actions */}
           <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-            <button className="btn" type="button" disabled={saving || form.title.trim().length < 3} onClick={savePost}>
+            <button
+              className="btn"
+              type="button"
+              disabled={saving || uploadingPhoto || form.title.trim().length < 3}
+              onClick={savePost}
+            >
               {saving ? "Saving..." : editingId ? "Save changes" : "Create post"}
             </button>
             {editingId ? (
@@ -246,21 +453,52 @@ export default function ManageExchangeClient({ initialPosts }: Props) {
               </button>
             ) : null}
           </div>
-          {notice ? <p style={{ margin: 0 }}>{notice}</p> : null}
+
+          {notice ? (
+            <p style={{ margin: 0, color: notice.includes("ailed") ? "#c0392b" : "inherit" }}>{notice}</p>
+          ) : null}
         </div>
       </div>
 
+      {/* Post list */}
       <div className="card">
         <h2 style={{ marginTop: 0 }}>Your posts</h2>
-        {posts.length === 0 ? <p style={{ marginBottom: 0 }}>No posts yet. Create your first exchange listing above.</p> : null}
+        {posts.length === 0 ? (
+          <p style={{ marginBottom: 0 }}>No posts yet. Create your first exchange listing above.</p>
+        ) : null}
         <div style={{ display: "grid", gap: "0.7rem" }}>
           {posts.map((post) => (
-            <article key={post.id} style={{ border: "1px solid var(--border)", borderRadius: "10px", padding: "0.75rem" }}>
+            <article
+              key={post.id}
+              style={{ border: "1px solid var(--border)", borderRadius: "10px", padding: "0.75rem" }}
+            >
               <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.85rem" }}>
-                {post.post_type === "offering" ? "I have" : "I need"} - {post.status}
+                {post.post_type === "offering" ? "I have" : "I need"} ·{" "}
+                <span style={{ textTransform: "capitalize" }}>{post.status}</span>
+                {post.fiber_category ? ` · ${post.fiber_category}` : ""}
               </p>
               <h3 style={{ marginTop: "0.25rem", marginBottom: "0.25rem" }}>{post.title}</h3>
-              {post.description ? <p style={{ marginTop: 0 }}>{post.description}</p> : null}
+              {post.description ? (
+                <p style={{ marginTop: 0, marginBottom: "0.4rem", fontSize: "0.9rem" }}>{post.description}</p>
+              ) : null}
+              {post.photo_urls?.length > 0 ? (
+                <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", marginBottom: "0.5rem" }}>
+                  {post.photo_urls.map((url) => (
+                    <img
+                      key={url}
+                      src={url}
+                      alt=""
+                      style={{
+                        width: "60px",
+                        height: "60px",
+                        objectFit: "cover",
+                        borderRadius: "5px",
+                        border: "1px solid var(--border)",
+                      }}
+                    />
+                  ))}
+                </div>
+              ) : null}
               <p style={{ margin: "0 0 0.6rem", fontSize: "0.9rem" }}>
                 Expires {new Date(post.expires_at).toLocaleDateString()}.
               </p>

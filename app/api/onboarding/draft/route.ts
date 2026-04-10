@@ -6,7 +6,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 const draftSchema = z.object({
   full_name: z.string().trim().max(120).optional(),
   business_name: z.string().trim().max(140).optional(),
-  short_bio: z.string().trim().max(150).optional(),
+  short_bio: z.string().trim().max(500).optional(),
   city: z.string().trim().max(120).optional(),
   state: z.string().trim().max(2).optional(),
   zip: z.string().trim().max(20).optional(),

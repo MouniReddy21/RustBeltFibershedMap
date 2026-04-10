@@ -66,23 +66,39 @@ export default function JoinPage() {
 
   return (
     <main>
-      <h1>Create your profile account</h1>
-      <p>You can start as a draft profile first, then complete map details later.</p>
+      <h1>{mode === "signup" ? "Create your account" : "Welcome back"}</h1>
+      <p className="page-lead">
+        {mode === "signup"
+          ? "Start a draft profile and complete your map listing at your own pace."
+          : "Sign in to manage your profile and listing."}
+      </p>
 
-      <div className="card" style={{ maxWidth: "520px" }}>
-        <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.8rem" }}>
-          <button className="btn secondary" type="button" onClick={() => setMode("signup")}>Sign up</button>
-          <button className="btn secondary" type="button" onClick={() => setMode("signin")}>Sign in</button>
+      <div className="card" style={{ maxWidth: "480px" }}>
+        <div className="toggle-group">
+          <button
+            className={`toggle-btn${mode === "signup" ? " active" : ""}`}
+            type="button"
+            onClick={() => setMode("signup")}
+          >
+            Sign up
+          </button>
+          <button
+            className={`toggle-btn${mode === "signin" ? " active" : ""}`}
+            type="button"
+            onClick={() => setMode("signin")}
+          >
+            Sign in
+          </button>
         </div>
 
-        <form onSubmit={onSubmit} style={{ display: "grid", gap: "0.65rem" }}>
+        <form onSubmit={onSubmit} style={{ display: "grid", gap: "0.75rem" }}>
           {mode === "signup" ? (
             <label>
               Full name
               <input
                 value={fullName}
                 onChange={(event) => setFullName(event.target.value)}
-                style={{ width: "100%", marginTop: "0.2rem", padding: "0.6rem", borderRadius: "8px", border: "1px solid var(--border)" }}
+                className="field-input"
               />
             </label>
           ) : null}
@@ -93,7 +109,7 @@ export default function JoinPage() {
               required
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              style={{ width: "100%", marginTop: "0.2rem", padding: "0.6rem", borderRadius: "8px", border: "1px solid var(--border)" }}
+              className="field-input"
             />
           </label>
           <label>
@@ -104,19 +120,19 @@ export default function JoinPage() {
               required
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              style={{ width: "100%", marginTop: "0.2rem", padding: "0.6rem", borderRadius: "8px", border: "1px solid var(--border)" }}
+              className="field-input"
             />
           </label>
 
-          <button className="btn" type="submit" disabled={loading}>
+          <button className="btn" type="submit" disabled={loading} style={{ marginTop: "0.25rem" }}>
             {loading ? "Please wait..." : mode === "signup" ? "Create account" : "Sign in"}
           </button>
-          {message ? <p style={{ margin: 0 }}>{message}</p> : null}
+          {message ? <p className={`notice${message.toLowerCase().includes("unable") || message.toLowerCase().includes("invalid") ? " error" : ""}`}>{message}</p> : null}
         </form>
       </div>
 
-      <p style={{ marginTop: "0.9rem" }}>
-        Looking to submit directly? <Link href="/submit">Open intake form</Link>.
+      <p style={{ marginTop: "0.9rem", fontSize: "0.9rem", color: "var(--muted)" }}>
+        Want to list your project? <Link href="/submit" style={{ color: "var(--accent-strong)", fontWeight: 600 }}>Open the intake form</Link>.
       </p>
     </main>
   );

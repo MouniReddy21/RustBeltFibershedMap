@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getAdminUser } from "@/lib/supabase/require-admin";
+import { geocodeCity } from "@/lib/mapbox/geocode";
 
 const reviewSchema = z.object({
-  action: z.enum(["approve", "reject"]),
+  action: z.enum(["approve", "reject", "geocode"]),
   rejectionReason: z.string().max(500).optional()
 });
 
@@ -22,6 +24,11 @@ function slugify(value: string) {
 }
 
 export async function PATCH(request: Request, context: RouteContext) {
+  const admin = await getAdminUser();
+  if (!admin) {
+    return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+  }
+
   const { id } = await context.params;
   const payload = await request.json().catch(() => null);
   const parsed = reviewSchema.safeParse(payload);
@@ -73,9 +80,38 @@ export async function PATCH(request: Request, context: RouteContext) {
     return NextResponse.json({ reviewed: true, status: "rejected" });
   }
 
+  // ── Geocode action ──────────────────────────────────────────────────────
+  if (parsed.data.action === "geocode") {
+    const { data: geoOrg } = await supabase
+      .from("organizations")
+      .select("id, city, state, lat, lng")
+      .eq("id", approval.organization_id)
+      .maybeSingle();
+
+    if (!geoOrg) {
+      return NextResponse.json({ error: "Organization not found." }, { status: 404 });
+    }
+
+    const coords = await geocodeCity(geoOrg.city, geoOrg.state);
+    if (!coords) {
+      return NextResponse.json({ error: `Could not geocode "${geoOrg.city}, ${geoOrg.state}". Check city name and try again.` }, { status: 422 });
+    }
+
+    const { error: geoUpdateError } = await supabase
+      .from("organizations")
+      .update({ lat: coords.lat, lng: coords.lng })
+      .eq("id", geoOrg.id);
+
+    if (geoUpdateError) {
+      return NextResponse.json({ error: "Failed to save coordinates." }, { status: 500 });
+    }
+
+    return NextResponse.json({ geocoded: true, lat: coords.lat, lng: coords.lng });
+  }
+
   const { data: org, error: orgError } = await supabase
     .from("organizations")
-    .select("id, business_name, profile_slug")
+    .select("id, business_name, profile_slug, city, state, lat, lng, location_privacy_level")
     .eq("id", approval.organization_id)
     .maybeSingle();
 
@@ -87,14 +123,29 @@ export async function PATCH(request: Request, context: RouteContext) {
   const finalSlug = org.profile_slug || `${baseSlug}-${org.id.slice(0, 8)}`;
   const nowIso = new Date().toISOString();
 
+  // Geocode city+state if we don't have coordinates yet.
+  // For city_only privacy, city centroid is the right coordinates to store.
+  // For exact privacy, the admin can manually update lat/lng later if needed.
+  let geocodedCoords: { lat: number; lng: number } | null = null;
+  if (org.lat == null || org.lng == null) {
+    geocodedCoords = await geocodeCity(org.city, org.state);
+  }
+
+  const orgUpdate: Record<string, unknown> = {
+    status: "approved",
+    approved_at: nowIso,
+    reviewed_at: nowIso,
+    profile_slug: finalSlug
+  };
+
+  if (geocodedCoords) {
+    orgUpdate.lat = geocodedCoords.lat;
+    orgUpdate.lng = geocodedCoords.lng;
+  }
+
   const { error: orgUpdateError } = await supabase
     .from("organizations")
-    .update({
-      status: "approved",
-      approved_at: nowIso,
-      reviewed_at: nowIso,
-      profile_slug: finalSlug
-    })
+    .update(orgUpdate)
     .eq("id", approval.organization_id);
 
   if (orgUpdateError) {

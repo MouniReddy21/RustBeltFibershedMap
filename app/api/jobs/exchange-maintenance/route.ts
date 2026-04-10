@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { sendResendEmail } from "@/lib/email/resend";
+import { buildRenewalReminderEmail } from "@/lib/email/renewal-reminder";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 type ExchangeReminderRow = {
   id: string;
@@ -12,10 +14,12 @@ type ExchangeReminderRow = {
   organization_id: string;
   organizations:
     | {
+        full_name: string;
         email: string;
         business_name: string;
       }
     | Array<{
+        full_name: string;
         email: string;
         business_name: string;
       }>;
@@ -62,7 +66,7 @@ export async function GET(request: Request) {
 
   const { data: remindRows, error: reminderQueryError } = await supabase
     .from("exchange_posts")
-    .select("id, title, post_type, expires_at, organization_id, organizations(email, business_name)")
+    .select("id, title, post_type, expires_at, organization_id, organizations(full_name, email, business_name)")
     .eq("status", "active")
     .is("renewal_reminded_at", null)
     .gte("expires_at", nowIso)
@@ -73,8 +77,9 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Failed to query reminder candidates." }, { status: 500 });
   }
 
+  const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL ?? "").replace(/\/$/, "");
   const reminders = (remindRows ?? []) as ExchangeReminderRow[];
-  const remindedIds: string[] = [];
+  let remindedCount = 0;
   const failed: Array<{ post_id: string; error: string }> = [];
 
   for (const row of reminders) {
@@ -86,41 +91,39 @@ export async function GET(request: Request) {
       continue;
     }
 
-    const expiresDate = new Date(row.expires_at).toLocaleDateString();
-    const subject = `Your Exchange post expires soon: ${row.title}`;
-    const html = `
-      <p>Hello ${org.business_name || "Fibershed member"},</p>
-      <p>Your Exchange Board post <strong>${row.title}</strong> is set to expire on <strong>${expiresDate}</strong>.</p>
-      <p>If it is still current, please renew or update it in your Exchange management page.</p>
-      <p>Thank you for keeping the Rust Belt Fibershed directory fresh.</p>
-    `;
+    // Mark before sending — prevents duplicate emails if the job is interrupted
+    const { error: markError } = await supabase
+      .from("exchange_posts")
+      .update({ renewal_reminded_at: new Date().toISOString() })
+      .eq("id", row.id);
 
-    const sendResult = await sendResendEmail({
-      to: recipient,
-      subject,
-      html,
-      text: `Your Exchange post \"${row.title}\" expires on ${expiresDate}. Please renew it if still active.`
-    });
-
-    if (!sendResult.ok) {
-      failed.push({ post_id: row.id, error: sendResult.error ?? "Email send failed." });
+    if (markError) {
+      failed.push({ post_id: row.id, error: `Failed to mark reminded: ${markError.message}` });
       continue;
     }
 
-    remindedIds.push(row.id);
-  }
+    const { subject, html, text } = buildRenewalReminderEmail({
+      recipientName: org.full_name || org.business_name,
+      businessName: org.business_name,
+      postTitle: row.title,
+      postType: row.post_type,
+      expiresAt: new Date(row.expires_at),
+      manageUrl: siteUrl ? `${siteUrl}/exchange/manage` : "/exchange/manage",
+    });
 
-  if (remindedIds.length > 0) {
-    await supabase
-      .from("exchange_posts")
-      .update({ renewal_reminded_at: new Date().toISOString() })
-      .in("id", remindedIds);
+    const sendResult = await sendResendEmail({ to: recipient, subject, html, text });
+
+    if (!sendResult.ok) {
+      failed.push({ post_id: row.id, error: sendResult.error ?? "Email send failed." });
+    } else {
+      remindedCount++;
+    }
   }
 
   return NextResponse.json({
     expired_count: expiredRows?.length ?? 0,
     reminder_candidates: reminders.length,
-    reminded_count: remindedIds.length,
-    reminder_failures: failed
+    reminded_count: remindedCount,
+    reminder_failures: failed,
   });
 }

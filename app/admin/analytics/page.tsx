@@ -1,4 +1,5 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { requireAdmin } from "@/lib/supabase/require-admin";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +41,7 @@ function countBy<T>(items: T[], keyFn: (item: T) => string) {
 }
 
 export default async function AdminAnalyticsPage() {
+  await requireAdmin();
   let supabase;
 
   try {
@@ -130,7 +132,12 @@ export default async function AdminAnalyticsPage() {
   return (
     <main>
       <h1>Admin Analytics Dashboard</h1>
-      <p>Internal insights for supply, demand, and regional network gaps.</p>
+      <p>
+        Internal insights for supply, demand, and regional network gaps.{" "}
+        <a href="/api/listings" target="_blank" rel="noopener noreferrer" style={{ fontSize: "0.9rem" }}>
+          API preview ↗
+        </a>
+      </p>
 
       <div style={{ display: "grid", gap: "0.9rem", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
         <div className="card">

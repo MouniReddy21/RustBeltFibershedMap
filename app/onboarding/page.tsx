@@ -117,26 +117,41 @@ export default function OnboardingPage() {
     );
   }
 
+  const statusColors: Record<string, { bg: string; color: string; border: string }> = {
+    pending: { bg: "#fff3d6", color: "#6b3f00", border: "#e1c07d" },
+    approved: { bg: "#def7e8", color: "#0f5132", border: "#84c6a7" },
+    rejected: { bg: "#f8d7da", color: "#842029", border: "#d39ca1" },
+    draft: { bg: "var(--panel)", color: "var(--muted)", border: "var(--border)" },
+  };
+  const chipStyle = statusColors[draft.status] ?? statusColors.draft;
+
   return (
     <main>
-      <h1>Complete your profile (draft mode)</h1>
-      <p>
+      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap", marginBottom: "0.25rem" }}>
+        <h1 style={{ margin: 0 }}>My Profile</h1>
+        <span style={{
+          padding: "0.2rem 0.7rem",
+          borderRadius: "999px",
+          fontSize: "0.8rem",
+          fontWeight: 700,
+          background: chipStyle.bg,
+          color: chipStyle.color,
+          border: `1px solid ${chipStyle.border}`,
+        }}>
+          {draft.status.charAt(0).toUpperCase() + draft.status.slice(1)}
+        </span>
+      </div>
+      <p className="page-lead">
         Save now, finish later. Your profile will not appear on the public map until you submit and an admin approves it.
       </p>
 
-      <div className="card" style={{ marginBottom: "1rem" }}>
-        <p style={{ margin: 0 }}>
-          Current status: <strong>{draft.status}</strong>
-        </p>
-      </div>
-
-      <div className="card" style={{ display: "grid", gap: "0.7rem" }}>
+      <div className="card" style={{ display: "grid", gap: "0.85rem", maxWidth: "600px" }}>
         <label>
           Full name
           <input
             value={draft.full_name}
             onChange={(event) => setDraft((prev) => ({ ...prev, full_name: event.target.value }))}
-            style={{ width: "100%", marginTop: "0.2rem", padding: "0.6rem", borderRadius: "8px", border: "1px solid var(--border)" }}
+            className="field-input"
           />
         </label>
         <label>
@@ -144,36 +159,37 @@ export default function OnboardingPage() {
           <input
             value={draft.business_name}
             onChange={(event) => setDraft((prev) => ({ ...prev, business_name: event.target.value }))}
-            style={{ width: "100%", marginTop: "0.2rem", padding: "0.6rem", borderRadius: "8px", border: "1px solid var(--border)" }}
+            className="field-input"
           />
         </label>
         <label>
-          Short bio
+          Short bio <span style={{ fontSize: "0.8rem", color: "var(--muted)", fontWeight: 400 }}>(500 chars max)</span>
           <textarea
             rows={3}
-            maxLength={150}
+            maxLength={500}
             value={draft.short_bio}
             onChange={(event) => setDraft((prev) => ({ ...prev, short_bio: event.target.value }))}
-            style={{ width: "100%", marginTop: "0.2rem", padding: "0.6rem", borderRadius: "8px", border: "1px solid var(--border)" }}
+            className="field-input"
           />
         </label>
 
-        <div style={{ display: "grid", gap: "0.6rem", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
+        <div style={{ display: "grid", gap: "0.6rem", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
           <label>
             City
             <input
               value={draft.city}
               onChange={(event) => setDraft((prev) => ({ ...prev, city: event.target.value }))}
-              style={{ width: "100%", marginTop: "0.2rem", padding: "0.6rem", borderRadius: "8px", border: "1px solid var(--border)" }}
+              className="field-input"
             />
           </label>
           <label>
-            State (2-letter)
+            State
             <input
               maxLength={2}
+              placeholder="OH"
               value={draft.state}
               onChange={(event) => setDraft((prev) => ({ ...prev, state: event.target.value.toUpperCase() }))}
-              style={{ width: "100%", marginTop: "0.2rem", padding: "0.6rem", borderRadius: "8px", border: "1px solid var(--border)" }}
+              className="field-input"
             />
           </label>
           <label>
@@ -181,7 +197,7 @@ export default function OnboardingPage() {
             <input
               value={draft.zip}
               onChange={(event) => setDraft((prev) => ({ ...prev, zip: event.target.value }))}
-              style={{ width: "100%", marginTop: "0.2rem", padding: "0.6rem", borderRadius: "8px", border: "1px solid var(--border)" }}
+              className="field-input"
             />
           </label>
         </div>
@@ -192,7 +208,7 @@ export default function OnboardingPage() {
             value={draft.producer_type}
             onChange={(event) => setDraft((prev) => ({ ...prev, producer_type: event.target.value }))}
             placeholder="Farmer, Manufacturer, Designer, etc."
-            style={{ width: "100%", marginTop: "0.2rem", padding: "0.6rem", borderRadius: "8px", border: "1px solid var(--border)" }}
+            className="field-input"
           />
         </label>
 
@@ -203,44 +219,49 @@ export default function OnboardingPage() {
             onChange={(event) =>
               setDraft((prev) => ({ ...prev, location_privacy_level: event.target.value as "exact" | "city_only" }))
             }
-            style={{ width: "100%", marginTop: "0.2rem", padding: "0.6rem", borderRadius: "8px", border: "1px solid var(--border)" }}
+            className="field-input"
           >
+            <option value="city_only">Show city-level location only (recommended)</option>
             <option value="exact">Show exact location on map</option>
-            <option value="city_only">Show city-level location only</option>
           </select>
         </label>
 
-        <label style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-          <input
-            type="checkbox"
-            checked={draft.public_contact}
-            onChange={(event) => setDraft((prev) => ({ ...prev, public_contact: event.target.checked }))}
-          />
-          Allow public contact details
-        </label>
+        <div style={{ display: "grid", gap: "0.5rem", paddingTop: "0.25rem" }}>
+          <label style={{ display: "flex", gap: "0.6rem", alignItems: "flex-start", cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={draft.public_contact}
+              onChange={(event) => setDraft((prev) => ({ ...prev, public_contact: event.target.checked }))}
+              style={{ marginTop: "0.15rem" }}
+            />
+            <span>Allow visitors to see my contact details publicly</span>
+          </label>
 
-        <label style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-          <input
-            type="checkbox"
-            checked={draft.consent}
-            onChange={(event) => setDraft((prev) => ({ ...prev, consent: event.target.checked }))}
-          />
-          I agree for this information to appear publicly on the Rust Belt Fibershed map.
-        </label>
+          <label style={{ display: "flex", gap: "0.6rem", alignItems: "flex-start", cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={draft.consent}
+              onChange={(event) => setDraft((prev) => ({ ...prev, consent: event.target.checked }))}
+              style={{ marginTop: "0.15rem" }}
+            />
+            <span>I agree for this information to appear publicly on the Rust Belt Fibershed map.</span>
+          </label>
+        </div>
 
-        <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", paddingTop: "0.25rem", borderTop: "1px solid var(--border)" }}>
           <button className="btn secondary" type="button" disabled={saving} onClick={saveDraft}>
             {saving ? "Saving..." : "Save draft"}
           </button>
           <button className="btn" type="button" disabled={submitting} onClick={submitForApproval}>
-            {submitting ? "Submitting..." : "Submit for admin approval"}
+            {submitting ? "Submitting..." : "Submit for review"}
           </button>
-          <Link className="btn secondary" href="/map">
-            Explore map
-          </Link>
         </div>
 
-        {notice ? <p style={{ margin: 0 }}>{notice}</p> : null}
+        {notice ? (
+          <p className={`notice${notice.toLowerCase().includes("unable") || notice.toLowerCase().includes("missing") ? " error" : ""}`}>
+            {notice}
+          </p>
+        ) : null}
       </div>
     </main>
   );

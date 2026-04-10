@@ -4,7 +4,7 @@ Mobile-first MVP platform for the Rust Belt Fibershed community. This repository
 
 - Supabase schema and RLS migrations
 - Next.js app foundation with planned route structure
-- API scaffolds for listings, profiles, contact relay, and Tally webhook intake
+- API routes for listings, profiles, contact relay, and native public submission form
 
 ## Local Setup
 
@@ -37,7 +37,7 @@ npm run dev
 - `GET /api/listings`
 - `GET /api/profiles/[slug]`
 - `POST /api/contact/relay`
-- `POST /api/tally/webhook`
+- `POST /api/submit/public`
 - `GET|PATCH /api/onboarding/draft`
 - `POST /api/onboarding/submit`
 

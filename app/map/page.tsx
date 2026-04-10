@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
+import { PRODUCER_TYPES, PRODUCER_TYPE_LEGEND } from "@/lib/producer-types";
 
 type Listing = {
   id: string;
@@ -49,15 +51,23 @@ type ApiPayload = {
   markers: Marker[];
 };
 
-const producerTypes = ["Farmer", "Fiber processing & mills", "Manufacturer", "Designer"];
+/** Filter buttons shown above the map — all canonical types + Other */
+const producerTypeFilters = [...PRODUCER_TYPES, "Other"] as string[];
+
 const fiberOptions = ["alpaca", "sheep wool", "angora", "mohair", "cashmere", "llama"];
-const producerLegend = [
-  { label: "Farmer", color: "#1f8a70" },
-  { label: "Fiber processing & mills", color: "#2f5d9f" },
-  { label: "Manufacturer", color: "#9f4a2f" },
-  { label: "Designer", color: "#7a3e9d" },
-  { label: "Other", color: "#57534e" }
-];
+
+/**
+ * Maps the ?type= query param used by the home-page category cards
+ * to a canonical producer_type filter value.
+ */
+const TYPE_PARAM_MAP: Record<string, string> = {
+  animal:    "Farmer / fiber grower",
+  plant:     "Farmer / fiber grower",
+  mill:      "Fiber processing & mills",
+  recycling: "Recycling & waste diversion",
+  mending:   "Mending / upcycling / vintage",
+  community: "Community resource",
+};
 
 function escapeHtml(input: string): string {
   return input
@@ -79,6 +89,7 @@ function hasValidCoordinates(marker: Marker): marker is MappableMarker {
 }
 
 export default function MapPage() {
+  const searchParams = useSearchParams();
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const markerRefs = useRef<Map<string, mapboxgl.Marker>>(new Map());
@@ -87,7 +98,9 @@ export default function MapPage() {
   const [q, setQ] = useState("");
   const [city, setCity] = useState("");
   const [fiber, setFiber] = useState("");
-  const [producerType, setProducerType] = useState("");
+  const [producerType, setProducerType] = useState(
+    () => TYPE_PARAM_MAP[searchParams.get("type") ?? ""] ?? ""
+  );
   const [wasteWoolOnly, setWasteWoolOnly] = useState(false);
   const [universityOnly, setUniversityOnly] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -170,8 +183,8 @@ export default function MapPage() {
         setMarkers(payload.markers ?? []);
 
         setActiveId((prev) => {
-          if (!prev) return (payload.listings?.[0]?.id ?? null) as string | null;
-          return payload.listings?.some((item) => item.id === prev) ? prev : (payload.listings?.[0]?.id ?? null);
+          if (!prev) return null;
+          return payload.listings?.some((item) => item.id === prev) ? prev : null;
         });
       } catch (err) {
         if ((err as Error).name !== "AbortError") {
@@ -246,14 +259,18 @@ export default function MapPage() {
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !activeId) {
-      return;
-    }
+    if (!map) return;
 
+    // Update active styling on all pins (clears highlight when activeId is null)
     markerRefs.current.forEach((marker, markerId) => {
       const element = marker.getElement() as HTMLButtonElement;
       element.classList.toggle("map-pin-active", markerId === activeId);
     });
+
+    if (!activeId) {
+      popupRef.current?.remove();
+      return;
+    }
 
     const activeMarker = markers.find((item) => item.id === activeId);
     if (!activeMarker || !hasValidCoordinates(activeMarker)) {
@@ -298,9 +315,6 @@ export default function MapPage() {
         <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
           <Link href="/submit" className="btn">
             Submit a listing
-          </Link>
-          <Link href="/api/listings" className="btn secondary">
-            API preview
           </Link>
         </div>
       </div>
@@ -350,7 +364,7 @@ export default function MapPage() {
         </div>
 
         <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", marginTop: "0.75rem" }}>
-          {producerTypes.map((type) => {
+          {producerTypeFilters.map((type) => {
             const active = producerType === type;
             return (
               <button
@@ -427,7 +441,7 @@ export default function MapPage() {
         <section className={`card map-pane ${mobileView === "map" ? "active" : ""}`} aria-label="Map panel">
           <h2 style={{ marginTop: 0 }}>Map</h2>
           <div className="map-legend" aria-label="Producer type color legend">
-            {producerLegend.map((item) => (
+            {PRODUCER_TYPE_LEGEND.map((item) => (
               <div key={item.label} className="map-legend-item">
                 <span className="map-legend-dot" style={{ backgroundColor: item.color }} />
                 <span>{item.label}</span>

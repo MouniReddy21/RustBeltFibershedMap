@@ -58,7 +58,7 @@ export default async function ManageExchangePage() {
           </p>
         </div>
       ) : null}
-      <ManageExchangeClient initialPosts={(posts ?? []) as ExchangePost[]} />
+      <ManageExchangeClient initialPosts={(posts ?? []) as ExchangePost[]} orgId={org.id} />
     </main>
   );
 }
