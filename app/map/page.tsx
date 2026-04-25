@@ -54,15 +54,21 @@ type ApiPayload = {
 /** Filter buttons shown above the map — all canonical types + Other */
 const producerTypeFilters = [...PRODUCER_TYPES, "Other"] as string[];
 
-const fiberOptions = ["alpaca", "sheep wool", "angora", "mohair", "cashmere", "llama"];
+const fiberOptions = [
+  // Animal fibers
+  "alpaca", "sheep wool", "angora", "mohair", "cashmere", "llama",
+  // Plant fibers
+  "cotton", "flax / linen", "hemp", "nettle",
+];
 
 /**
  * Maps the ?type= query param used by the home-page category cards
  * to a canonical producer_type filter value.
+ * Note: "plant" is intentionally absent — plant fiber browsing is handled
+ * via the ?fiber= param so it doesn't produce the same results as "animal".
  */
 const TYPE_PARAM_MAP: Record<string, string> = {
   animal:    "Farmer / fiber grower",
-  plant:     "Farmer / fiber grower",
   mill:      "Fiber processing & mills",
   recycling: "Recycling & waste diversion",
   mending:   "Mending / upcycling / vintage",
@@ -95,9 +101,17 @@ export default function MapPage() {
   const markerRefs = useRef<Map<string, mapboxgl.Marker>>(new Map());
   const popupRef = useRef<mapboxgl.Popup | null>(null);
 
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(() => searchParams.get("q") ?? "");
   const [city, setCity] = useState("");
-  const [fiber, setFiber] = useState("");
+  // Debounced copies — the fetch effect depends on these, not the raw values.
+  // Inputs stay snappy while API calls are rate-limited to one per 350 ms of silence.
+  const [debouncedQ, setDebouncedQ] = useState(() => searchParams.get("q") ?? "");
+  const [debouncedCity, setDebouncedCity] = useState("");
+  const [fiber, setFiber] = useState(() => {
+    const param = searchParams.get("fiber") ?? "";
+    // Only pre-select if it's a known option, to avoid stale URL params causing confusion.
+    return fiberOptions.includes(param) ? param : "";
+  });
   const [producerType, setProducerType] = useState(
     () => TYPE_PARAM_MAP[searchParams.get("type") ?? ""] ?? ""
   );
@@ -115,6 +129,16 @@ export default function MapPage() {
   useEffect(() => {
     activeIdRef.current = activeId;
   }, [activeId]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQ(q), 350);
+    return () => clearTimeout(timer);
+  }, [q]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedCity(city), 350);
+    return () => clearTimeout(timer);
+  }, [city]);
 
   useEffect(() => {
     if (mapRef.current || !mapContainerRef.current) {
@@ -156,8 +180,8 @@ export default function MapPage() {
     const controller = new AbortController();
     const params = new URLSearchParams();
 
-    if (q) params.set("q", q);
-    if (city) params.set("city", city);
+    if (debouncedQ) params.set("q", debouncedQ);
+    if (debouncedCity) params.set("city", debouncedCity);
     if (fiber) params.set("fiber", fiber);
     if (producerType) params.set("producer_type", producerType);
     if (wasteWoolOnly) params.set("waste_wool", "true");
@@ -198,7 +222,7 @@ export default function MapPage() {
     load();
 
     return () => controller.abort();
-  }, [q, city, fiber, producerType, wasteWoolOnly, universityOnly]);
+  }, [debouncedQ, debouncedCity, fiber, producerType, wasteWoolOnly, universityOnly]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -352,7 +376,9 @@ export default function MapPage() {
             className="btn secondary"
             onClick={() => {
               setQ("");
+              setDebouncedQ("");
               setCity("");
+              setDebouncedCity("");
               setFiber("");
               setProducerType("");
               setWasteWoolOnly(false);
@@ -472,7 +498,7 @@ export default function MapPage() {
             {loading ? "Loading listings..." : `${listings.length} listings found`}
           </p>
           {error && <p style={{ color: "#991b1b" }}>{error}</p>}
-          <div style={{ display: "grid", gap: "0.6rem", maxHeight: "500px", overflowY: "auto" }}>
+          <div style={{ display: "grid", gap: "0.6rem" }}>
             {listings.map((listing) => {
               const selected = listing.id === activeId;
               return (
@@ -511,14 +537,22 @@ export default function MapPage() {
                       </span>
                     )}
                   </div>
-                  <Link
-                    href={`/profiles/${listing.profile_slug}`}
-                    className="btn secondary"
-                    style={{ marginTop: "0.6rem", display: "inline-block" }}
-                    onClick={(event) => event.stopPropagation()}
-                  >
-                    View profile
-                  </Link>
+                  <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", marginTop: "0.6rem" }}>
+                    <Link
+                      href={`/profiles/${listing.profile_slug}`}
+                      className="btn secondary"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      View profile
+                    </Link>
+                    <Link
+                      href={`/exchange?org=${listing.profile_slug}`}
+                      className="btn secondary"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      View posts
+                    </Link>
+                  </div>
                 </article>
               );
             })}

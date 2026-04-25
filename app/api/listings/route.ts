@@ -8,12 +8,18 @@ function normalizeFibers(profile: Record<string, unknown> | null): string[] {
   if (!profile) return [];
 
   const fiberFlags: Array<[string, string]> = [
+    // Animal fibers
     ["fiber_alpaca", "alpaca"],
     ["fiber_sheep_wool", "sheep wool"],
     ["fiber_angora", "angora"],
     ["fiber_mohair", "mohair"],
     ["fiber_cashmere", "cashmere"],
-    ["fiber_llama", "llama"]
+    ["fiber_llama", "llama"],
+    // Plant fibers
+    ["crop_cotton", "cotton"],
+    ["crop_flax_linen", "flax / linen"],
+    ["crop_hemp", "hemp"],
+    ["crop_nettle", "nettle"],
   ];
 
   return fiberFlags
@@ -35,7 +41,7 @@ export async function GET(request: Request) {
   const { data, error } = await supabase
     .from("organizations")
     .select(
-      "id, profile_slug, business_name, short_bio, city, state, producer_type, lat, lng, status, location_privacy_level, public_contact, organization_profiles(waste_wool_avail, is_university, fiber_alpaca, fiber_sheep_wool, fiber_angora, fiber_mohair, fiber_cashmere, fiber_llama)"
+      "id, profile_slug, business_name, short_bio, city, state, producer_type, lat, lng, status, location_privacy_level, public_contact, organization_profiles(waste_wool_avail, is_university, fiber_alpaca, fiber_sheep_wool, fiber_angora, fiber_mohair, fiber_cashmere, fiber_llama, crop_cotton, crop_flax_linen, crop_hemp, crop_nettle)"
     )
     .eq("status", "approved")
     .order("business_name", { ascending: true })

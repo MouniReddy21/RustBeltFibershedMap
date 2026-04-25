@@ -19,7 +19,7 @@ const FIBER_CATEGORIES = [
 ] as const;
 
 type ExchangePageProps = {
-  searchParams: Promise<{ q?: string; type?: string; fiber?: string }>;
+  searchParams: Promise<{ q?: string; type?: string; fiber?: string; org?: string }>;
 };
 
 export default async function ExchangePage({ searchParams }: ExchangePageProps) {
@@ -29,8 +29,20 @@ export default async function ExchangePage({ searchParams }: ExchangePageProps) 
   const fiber = FIBER_CATEGORIES.includes(params.fiber as (typeof FIBER_CATEGORIES)[number])
     ? (params.fiber as string)
     : "";
+  const orgSlug = (params.org ?? "").trim();
 
   const supabase = await createSupabaseServerClient();
+
+  // If filtering by org slug, resolve it to an org record first
+  let orgFilter: { id: string; business_name: string } | null = null;
+  if (orgSlug) {
+    const { data: orgData } = await supabase
+      .from("organizations")
+      .select("id, business_name")
+      .eq("profile_slug", orgSlug)
+      .maybeSingle();
+    orgFilter = orgData ?? null;
+  }
 
   let query = supabase
     .from("exchange_posts")
@@ -40,6 +52,10 @@ export default async function ExchangePage({ searchParams }: ExchangePageProps) 
     .eq("status", "active")
     .order("posted_at", { ascending: false })
     .limit(200);
+
+  if (orgFilter) {
+    query = query.eq("organization_id", orgFilter.id);
+  }
 
   if (type) {
     query = query.eq("post_type", type);
@@ -58,7 +74,7 @@ export default async function ExchangePage({ searchParams }: ExchangePageProps) 
     return text.includes(q);
   });
 
-  const activeFilters = [type, fiber].filter(Boolean).length;
+  const activeFilters = [type, fiber, orgFilter ? orgSlug : ""].filter(Boolean).length;
 
   return (
     <main>
@@ -74,9 +90,18 @@ export default async function ExchangePage({ searchParams }: ExchangePageProps) 
       >
         <div>
           <h1 style={{ margin: "0 0 0.4rem" }}>Fiber Exchange Board</h1>
-          <p className="page-lead" style={{ margin: 0 }}>
-            Local &ldquo;I have&rdquo; and &ldquo;I need&rdquo; posts from listed members.
-          </p>
+          {orgFilter ? (
+            <p className="page-lead" style={{ margin: 0 }}>
+              Posts by <strong>{orgFilter.business_name}</strong>{" "}
+              <Link href="/exchange" style={{ fontSize: "0.85rem", color: "var(--accent-strong)", fontWeight: 600 }}>
+                · View all posts
+              </Link>
+            </p>
+          ) : (
+            <p className="page-lead" style={{ margin: 0 }}>
+              Local &ldquo;I have&rdquo; and &ldquo;I need&rdquo; posts from listed members.
+            </p>
+          )}
         </div>
         <Link
           className="btn secondary"
@@ -91,6 +116,7 @@ export default async function ExchangePage({ searchParams }: ExchangePageProps) 
         className="card"
         style={{ margin: "1.25rem 0", display: "grid", gap: "0.6rem", maxWidth: "660px" }}
       >
+        {orgSlug && <input type="hidden" name="org" value={orgSlug} />}
         <input
           name="q"
           defaultValue={params.q ?? ""}
@@ -135,7 +161,7 @@ export default async function ExchangePage({ searchParams }: ExchangePageProps) 
               {q ? ` · "${params.q}"` : ""}
             </span>
             <Link
-              href="/exchange"
+              href={orgSlug ? `/exchange?org=${orgSlug}` : "/exchange"}
               style={{ fontSize: "0.82rem", color: "var(--accent-strong)", fontWeight: 600 }}
             >
               Clear filters

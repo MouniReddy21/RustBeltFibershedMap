@@ -53,8 +53,8 @@ export default async function ManageExchangePage() {
       {org.status !== "approved" ? (
         <div className="card" style={{ marginBottom: "1rem" }}>
           <p style={{ margin: 0 }}>
-            Your listing is currently <strong>{org.status}</strong>. You can draft posts now, but they may not be
-            visible publicly until your listing is approved.
+            Your listing is currently <strong>{org.status}</strong>. You can view existing posts, but posting to the
+            exchange requires an approved listing.
           </p>
         </div>
       ) : null}

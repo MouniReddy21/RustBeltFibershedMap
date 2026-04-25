@@ -16,10 +16,15 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
 
   const isAdmin = user?.app_metadata?.is_admin === true;
 
-  // Only look up org status for non-admin members
-  const { data: org } = user && !isAdmin
-    ? await supabase.from("organizations").select("status").eq("auth_user_id", user.id).maybeSingle()
-    : { data: null };
+  // Prefer app_metadata (populated by syncOrgMetaToAuth on status changes) to avoid a DB query.
+  // Fall back to DB only for users whose metadata hasn't been written yet.
+  const metaStatus = user?.app_metadata?.org_status as string | undefined;
+  const metaSlug = user?.app_metadata?.org_profile_slug as string | null | undefined;
+  const hasOrgMeta = !isAdmin && user && metaStatus !== undefined;
+
+  const { data: org } = !hasOrgMeta && user && !isAdmin
+    ? await supabase.from("organizations").select("status, profile_slug").eq("auth_user_id", user.id).maybeSingle()
+    : { data: hasOrgMeta ? { status: metaStatus, profile_slug: metaSlug ?? null } : null };
 
   const accountStatus = isAdmin ? "admin" : (org?.status ?? "guest");
   const accountStatusLabel =
@@ -66,7 +71,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
               <Link href="/submit">Submit</Link>
             </nav>
             <div className="account-nav">
-              <span className={accountStatusClass}>{accountStatusLabel}</span>
+              {user && <span className={accountStatusClass}>{accountStatusLabel}</span>}
               {user ? (
                 <>
                   {isAdmin ? (
@@ -79,9 +84,16 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
                       </Link>
                     </>
                   ) : (
-                    <Link className="btn secondary" href="/onboarding">
-                      My Profile
-                    </Link>
+                    <>
+                      {accountStatus === "approved" && org?.profile_slug && (
+                        <Link className="btn secondary" href={`/profiles/${org.profile_slug}`}>
+                          View Profile
+                        </Link>
+                      )}
+                      <Link className="btn secondary" href="/onboarding">
+                        Edit Profile
+                      </Link>
+                    </>
                   )}
                   <SignOutButton />
                 </>

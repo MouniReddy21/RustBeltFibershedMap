@@ -10,7 +10,7 @@ export default function JoinPage() {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [mode, setMode] = useState<"signup" | "signin">("signup");
+  const [mode, setMode] = useState<"signup" | "signin" | "reset">("signup");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -21,6 +21,19 @@ export default function JoinPage() {
 
     try {
       const supabase = createSupabaseBrowserClient();
+
+      if (mode === "reset") {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: `${window.location.origin}/onboarding`,
+        });
+        setLoading(false);
+        if (error) {
+          setMessage(error.message);
+        } else {
+          setMessage("Check your email for a password reset link.");
+        }
+        return;
+      }
 
       if (mode === "signup") {
         const { error } = await supabase.auth.signUp({
@@ -55,6 +68,10 @@ export default function JoinPage() {
         }
       }
 
+      // Silently link any existing public-form submission that shares this email.
+      // Non-blocking — a failure here does not prevent login.
+      await fetch("/api/auth/link-submission", { method: "POST" }).catch(() => null);
+
       router.push("/onboarding");
       router.refresh();
     } catch {
@@ -66,30 +83,36 @@ export default function JoinPage() {
 
   return (
     <main>
-      <h1>{mode === "signup" ? "Create your account" : "Welcome back"}</h1>
+      <h1>
+        {mode === "signup" ? "Create your account" : mode === "signin" ? "Welcome back" : "Reset your password"}
+      </h1>
       <p className="page-lead">
         {mode === "signup"
           ? "Start a draft profile and complete your map listing at your own pace."
-          : "Sign in to manage your profile and listing."}
+          : mode === "signin"
+          ? "Sign in to manage your profile and listing."
+          : "Enter your email and we'll send you a reset link."}
       </p>
 
       <div className="card" style={{ maxWidth: "480px" }}>
-        <div className="toggle-group">
-          <button
-            className={`toggle-btn${mode === "signup" ? " active" : ""}`}
-            type="button"
-            onClick={() => setMode("signup")}
-          >
-            Sign up
-          </button>
-          <button
-            className={`toggle-btn${mode === "signin" ? " active" : ""}`}
-            type="button"
-            onClick={() => setMode("signin")}
-          >
-            Sign in
-          </button>
-        </div>
+        {mode !== "reset" && (
+          <div className="toggle-group">
+            <button
+              className={`toggle-btn${mode === "signup" ? " active" : ""}`}
+              type="button"
+              onClick={() => { setMode("signup"); setMessage(""); }}
+            >
+              Sign up
+            </button>
+            <button
+              className={`toggle-btn${mode === "signin" ? " active" : ""}`}
+              type="button"
+              onClick={() => { setMode("signin"); setMessage(""); }}
+            >
+              Sign in
+            </button>
+          </div>
+        )}
 
         <form onSubmit={onSubmit} style={{ display: "grid", gap: "0.75rem" }}>
           {mode === "signup" ? (
@@ -112,21 +135,50 @@ export default function JoinPage() {
               className="field-input"
             />
           </label>
-          <label>
-            Password
-            <input
-              type="password"
-              minLength={8}
-              required
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              className="field-input"
-            />
-          </label>
+          {mode !== "reset" && (
+            <label>
+              Password
+              <input
+                type="password"
+                minLength={8}
+                required
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                className="field-input"
+              />
+            </label>
+          )}
 
           <button className="btn" type="submit" disabled={loading} style={{ marginTop: "0.25rem" }}>
-            {loading ? "Please wait..." : mode === "signup" ? "Create account" : "Sign in"}
+            {loading
+              ? "Please wait..."
+              : mode === "signup"
+              ? "Create account"
+              : mode === "signin"
+              ? "Sign in"
+              : "Send reset link"}
           </button>
+
+          {mode === "signin" && (
+            <button
+              type="button"
+              onClick={() => { setMode("reset"); setMessage(""); }}
+              style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontSize: "0.85rem", color: "var(--accent-strong)", fontWeight: 600, textAlign: "left" }}
+            >
+              Forgot your password?
+            </button>
+          )}
+
+          {mode === "reset" && (
+            <button
+              type="button"
+              onClick={() => { setMode("signin"); setMessage(""); }}
+              style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontSize: "0.85rem", color: "var(--muted)", textAlign: "left" }}
+            >
+              Back to sign in
+            </button>
+          )}
+
           {message ? <p className={`notice${message.toLowerCase().includes("unable") || message.toLowerCase().includes("invalid") ? " error" : ""}`}>{message}</p> : null}
         </form>
       </div>

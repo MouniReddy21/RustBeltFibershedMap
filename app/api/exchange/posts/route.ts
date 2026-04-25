@@ -76,12 +76,19 @@ export async function POST(request: Request) {
 
   const { data: org, error: orgError } = await supabase
     .from("organizations")
-    .select("id")
+    .select("id, status")
     .eq("auth_user_id", user.id)
     .maybeSingle();
 
   if (orgError || !org) {
     return NextResponse.json({ error: "No organization found for this account." }, { status: 403 });
+  }
+
+  if (org.status !== "approved") {
+    return NextResponse.json(
+      { error: "Your listing must be approved before you can post to the exchange." },
+      { status: 403 }
+    );
   }
 
   const input = parsed.data;

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { syncOrgMetaToAuth } from "@/lib/supabase/sync-org-meta";
 
 async function getAuthenticatedUser() {
   const supabase = await createSupabaseServerClient();
@@ -104,6 +105,11 @@ export async function POST() {
     if (approvalInsertError) {
       return NextResponse.json({ error: "Failed to create approval request." }, { status: 500 });
     }
+  }
+
+  // Sync auth metadata so the layout reflects the new status without a DB query.
+  if (user.id) {
+    await syncOrgMetaToAuth(user.id, "pending", null).catch(() => null);
   }
 
   return NextResponse.json({ submitted: true, status: "pending" });

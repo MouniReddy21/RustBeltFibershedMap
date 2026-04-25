@@ -3,7 +3,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const CATEGORIES = [
   { icon: "🐑", label: "Animal Products & Wool", href: "/map?type=animal" },
-  { icon: "🌱", label: "Plant Fibers", href: "/map?type=plant" },
+  { icon: "🌱", label: "Plant Fibers", href: "/map?fiber=hemp" },
   { icon: "⚙️", label: "Fiber Mills & Manufacturing", href: "/map?type=mill" },
   { icon: "♻️", label: "Recycling & Waste Fiber", href: "/map?type=recycling" },
   { icon: "🪡", label: "Mending, Upcycling & Vintage", href: "/map?type=mending" },
@@ -117,10 +117,10 @@ export default async function HomePage() {
                 ? post.organizations[0]
                 : post.organizations;
               const isOffering = post.post_type === "offering";
-              const profileHref = org?.profile_slug ? `/profiles/${org.profile_slug}` : "/exchange";
+              const postHref = org?.profile_slug ? `/exchange?org=${org.profile_slug}` : "/exchange";
 
               return (
-                <Link key={post.id} href={profileHref} className="exchange-post-card">
+                <Link key={post.id} href={postHref} className="exchange-post-card">
                   <div style={{ display: "flex", alignItems: "center", gap: "0.45rem", marginBottom: "0.4rem" }}>
                     <span
                       style={{

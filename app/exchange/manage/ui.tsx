@@ -72,7 +72,11 @@ export default function ManageExchangeClient({ initialPosts, orgId }: Props) {
   const [saving, setSaving] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [notice, setNotice] = useState("");
+  // ID of the post currently awaiting delete confirmation. null = no pending delete.
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Tracks storage paths queued for deletion. Only deleted after a successful save — never on cancel.
+  const photosToDeleteRef = useRef<string[]>([]);
 
   const activeCount = useMemo(() => posts.filter((post) => post.status === "active").length, [posts]);
 
@@ -97,6 +101,9 @@ export default function ManageExchangeClient({ initialPosts, orgId }: Props) {
     setEditingId(null);
     setForm(emptyForm);
     setNotice("");
+    setConfirmDeleteId(null);
+    // Discard queued deletions — user cancelled, so leave storage untouched.
+    photosToDeleteRef.current = [];
   }
 
   async function handlePhotoSelect(event: React.ChangeEvent<HTMLInputElement>) {
@@ -148,6 +155,12 @@ export default function ManageExchangeClient({ initialPosts, orgId }: Props) {
   }
 
   function removePhoto(url: string) {
+    // Extract the storage path from the public URL: everything after "/exchange-photos/"
+    const marker = "/exchange-photos/";
+    const idx = url.indexOf(marker);
+    if (idx !== -1) {
+      photosToDeleteRef.current = [...photosToDeleteRef.current, url.slice(idx + marker.length)];
+    }
     setForm((prev) => ({ ...prev, photoUrls: prev.photoUrls.filter((u) => u !== url) }));
   }
 
@@ -188,6 +201,13 @@ export default function ManageExchangeClient({ initialPosts, orgId }: Props) {
       if (!isEdit) return [json.post as ExchangePost, ...current];
       return current.map((post) => (post.id === editingId ? (json.post as ExchangePost) : post));
     });
+
+    // Now that the save succeeded, delete any photos that were removed during this edit session.
+    if (photosToDeleteRef.current.length > 0) {
+      const supabase = createSupabaseBrowserClient();
+      await supabase.storage.from("exchange-photos").remove(photosToDeleteRef.current);
+      photosToDeleteRef.current = [];
+    }
 
     setSaving(false);
     setNotice(isEdit ? "Post updated." : "Post created.");
@@ -272,6 +292,9 @@ export default function ManageExchangeClient({ initialPosts, orgId }: Props) {
               onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))}
               style={inputStyle}
             />
+            <span style={{ fontSize: "0.78rem", color: "var(--muted)", display: "block", marginTop: "0.2rem" }}>
+              {140 - form.title.length} characters remaining
+            </span>
           </label>
 
           {/* Description */}
@@ -330,6 +353,7 @@ export default function ManageExchangeClient({ initialPosts, orgId }: Props) {
               <input
                 type="date"
                 value={form.expiresAt}
+                min={new Date().toISOString().slice(0, 10)}
                 onChange={(e) => setForm((prev) => ({ ...prev, expiresAt: e.target.value }))}
                 style={inputStyle}
               />
@@ -438,7 +462,7 @@ export default function ManageExchangeClient({ initialPosts, orgId }: Props) {
           </div>
 
           {/* Actions */}
-          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
             <button
               className="btn"
               type="button"
@@ -452,6 +476,11 @@ export default function ManageExchangeClient({ initialPosts, orgId }: Props) {
                 Cancel edit
               </button>
             ) : null}
+            {form.title.trim().length < 3 && (
+              <span style={{ fontSize: "0.82rem", color: "var(--muted)" }}>
+                Title must be at least 3 characters to post.
+              </span>
+            )}
           </div>
 
           {notice ? (
@@ -515,9 +544,36 @@ export default function ManageExchangeClient({ initialPosts, orgId }: Props) {
                     Reopen
                   </button>
                 )}
-                <button className="btn secondary" type="button" onClick={() => removePost(post.id)}>
-                  Delete
-                </button>
+                {confirmDeleteId === post.id ? (
+                  <>
+                    <span style={{ fontSize: "0.85rem", color: "#7f1d1d", alignSelf: "center" }}>
+                      Delete this post?
+                    </span>
+                    <button
+                      className="btn"
+                      type="button"
+                      style={{ background: "#c0392b", borderColor: "#c0392b" }}
+                      onClick={() => { setConfirmDeleteId(null); removePost(post.id); }}
+                    >
+                      Yes, delete
+                    </button>
+                    <button
+                      className="btn secondary"
+                      type="button"
+                      onClick={() => setConfirmDeleteId(null)}
+                    >
+                      Cancel
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    className="btn secondary"
+                    type="button"
+                    onClick={() => setConfirmDeleteId(post.id)}
+                  >
+                    Delete
+                  </button>
+                )}
               </div>
             </article>
           ))}

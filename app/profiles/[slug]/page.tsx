@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import RelayForm from "./relay-form";
 import MiniMap from "./mini-map";
+import CopyLinkButton from "./copy-link-button";
+import PostContactButton from "./post-contact-button";
 
 type Props = {
   params: Promise<{ slug: string }>;
@@ -65,12 +67,12 @@ export default async function ProfilePage({ params }: Props) {
           {org.county ? `, ${org.county} County` : ""}, {org.state}
         </p>
         <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>
-          <Link className="btn secondary" href={shareUrl}>
-            Share profile link
-          </Link>
-          <Link className="btn secondary" href="/submit">
-            Request profile edit
-          </Link>
+          <CopyLinkButton url={`${process.env.NEXT_PUBLIC_SITE_URL ?? ""}${shareUrl}`} />
+          {isOwner && (
+            <Link className="btn secondary" href="/onboarding">
+              Edit my profile
+            </Link>
+          )}
         </div>
       </div>
 
@@ -82,7 +84,7 @@ export default async function ProfilePage({ params }: Props) {
             <div style={{ marginTop: "0.6rem", display: "flex", gap: "0.5rem", alignItems: "center" }}>
               <Link
                 className="btn secondary"
-                href={`/map`}
+                href={`/map?q=${encodeURIComponent(org.business_name)}`}
                 style={{ fontSize: "0.85rem", padding: "0.4rem 0.8rem" }}
               >
                 View on full map
@@ -134,11 +136,18 @@ export default async function ProfilePage({ params }: Props) {
                 </p>
                 <h3 style={{ margin: "0.25rem 0" }}>{post.title}</h3>
                 {post.description ? <p style={{ marginTop: 0 }}>{post.description}</p> : null}
-                <p style={{ margin: 0, fontSize: "0.9rem" }}>
+                <p style={{ margin: "0 0 0.6rem", fontSize: "0.9rem" }}>
                   {post.material_type ? `Material: ${post.material_type}. ` : ""}
                   {post.fiber_category ? `Fiber: ${post.fiber_category}. ` : ""}
                   {post.quantity ? `Qty: ${post.quantity}.` : ""}
                 </p>
+                {!isOwner && (
+                  <PostContactButton
+                    postTitle={post.title}
+                    toOrganizationId={org.id}
+                    businessName={org.business_name}
+                  />
+                )}
               </article>
             ))}
           </div>

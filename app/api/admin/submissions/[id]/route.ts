@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getAdminUser } from "@/lib/supabase/require-admin";
 import { geocodeCity } from "@/lib/mapbox/geocode";
+import { syncOrgMetaToAuth } from "@/lib/supabase/sync-org-meta";
 
 const reviewSchema = z.object({
   action: z.enum(["approve", "reject", "geocode"]),
@@ -69,13 +70,20 @@ export async function PATCH(request: Request, context: RouteContext) {
       return NextResponse.json({ error: "Failed to reject submission." }, { status: 500 });
     }
 
-    await supabase
+    const { data: rejectedOrg } = await supabase
       .from("organizations")
       .update({
         status: "rejected",
         reviewed_at: new Date().toISOString()
       })
-      .eq("id", approval.organization_id);
+      .eq("id", approval.organization_id)
+      .select("auth_user_id, profile_slug")
+      .maybeSingle();
+
+    // Keep auth metadata in sync so the layout doesn't need a second DB query.
+    if (rejectedOrg?.auth_user_id) {
+      await syncOrgMetaToAuth(rejectedOrg.auth_user_id, "rejected", rejectedOrg.profile_slug ?? null).catch(() => null);
+    }
 
     return NextResponse.json({ reviewed: true, status: "rejected" });
   }
@@ -163,6 +171,17 @@ export async function PATCH(request: Request, context: RouteContext) {
 
   if (approvalUpdateError) {
     return NextResponse.json({ error: "Failed to approve submission." }, { status: 500 });
+  }
+
+  // Fetch auth_user_id to sync metadata.
+  const { data: approvedMeta } = await supabase
+    .from("organizations")
+    .select("auth_user_id")
+    .eq("id", approval.organization_id)
+    .maybeSingle();
+
+  if (approvedMeta?.auth_user_id) {
+    await syncOrgMetaToAuth(approvedMeta.auth_user_id, "approved", finalSlug).catch(() => null);
   }
 
   return NextResponse.json({ reviewed: true, status: "approved", profile_slug: finalSlug });
