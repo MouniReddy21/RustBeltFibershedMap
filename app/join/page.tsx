@@ -188,7 +188,7 @@ export default function JoinPage() {
               : "Update password"}
           </button>
 
-          {mode === "signin" && mode !== "update" && (
+          {mode === "signin" && (
             <button
               type="button"
               onClick={() => { setMode("reset"); setMessage(""); }}
