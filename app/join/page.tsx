@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -10,9 +10,20 @@ export default function JoinPage() {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [mode, setMode] = useState<"signup" | "signin" | "reset">("signup");
+  const [mode, setMode] = useState<"signup" | "signin" | "reset" | "update">("signup");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    const supabase = createSupabaseBrowserClient();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "PASSWORD_RECOVERY") {
+        setMode("update");
+        setMessage("");
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, []);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -22,9 +33,21 @@ export default function JoinPage() {
     try {
       const supabase = createSupabaseBrowserClient();
 
+      if (mode === "update") {
+        const { error } = await supabase.auth.updateUser({ password });
+        setLoading(false);
+        if (error) {
+          setMessage(error.message);
+        } else {
+          setMessage("Password updated successfully. Taking you to your profile...");
+          setTimeout(() => router.push("/onboarding"), 1500);
+        }
+        return;
+      }
+
       if (mode === "reset") {
         const { error } = await supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: `${window.location.origin}/onboarding`,
+          redirectTo: `${window.location.origin}/join`,
         });
         setLoading(false);
         if (error) {
@@ -84,18 +107,20 @@ export default function JoinPage() {
   return (
     <main>
       <h1>
-        {mode === "signup" ? "Create your account" : mode === "signin" ? "Welcome back" : "Reset your password"}
+        {mode === "signup" ? "Create your account" : mode === "signin" ? "Welcome back" : mode === "reset" ? "Reset your password" : "Set a new password"}
       </h1>
       <p className="page-lead">
         {mode === "signup"
           ? "Start a draft profile and complete your map listing at your own pace."
           : mode === "signin"
           ? "Sign in to manage your profile and listing."
-          : "Enter your email and we'll send you a reset link."}
+          : mode === "reset"
+          ? "Enter your email and we'll send you a reset link."
+          : "Choose a new password for your account."}
       </p>
 
       <div className="card" style={{ maxWidth: "480px" }}>
-        {mode !== "reset" && (
+        {mode !== "reset" && mode !== "update" && (
           <div className="toggle-group">
             <button
               className={`toggle-btn${mode === "signup" ? " active" : ""}`}
@@ -125,19 +150,21 @@ export default function JoinPage() {
               />
             </label>
           ) : null}
-          <label>
-            Email
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              className="field-input"
-            />
-          </label>
-          {mode !== "reset" && (
+          {mode !== "update" && (
             <label>
-              Password
+              Email
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                className="field-input"
+              />
+            </label>
+          )}
+          {(mode === "signup" || mode === "signin" || mode === "update") && (
+            <label>
+              {mode === "update" ? "New password" : "Password"}
               <input
                 type="password"
                 minLength={8}
@@ -156,10 +183,12 @@ export default function JoinPage() {
               ? "Create account"
               : mode === "signin"
               ? "Sign in"
-              : "Send reset link"}
+              : mode === "reset"
+              ? "Send reset link"
+              : "Update password"}
           </button>
 
-          {mode === "signin" && (
+          {mode === "signin" && mode !== "update" && (
             <button
               type="button"
               onClick={() => { setMode("reset"); setMessage(""); }}
