@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { ExchangePost, ExchangePostStatus, ExchangePostType } from "@/lib/types";
@@ -384,12 +385,12 @@ export default function ManageExchangeClient({ initialPosts, orgId }: Props) {
               <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.5rem" }}>
                 {form.photoUrls.map((url) => (
                   <div key={url} style={{ position: "relative" }}>
-                    <img
+                    <Image
                       src={url}
                       alt=""
+                      width={80}
+                      height={80}
                       style={{
-                        width: "80px",
-                        height: "80px",
                         objectFit: "cover",
                         borderRadius: "6px",
                         border: "1px solid var(--border)",
@@ -513,13 +514,13 @@ export default function ManageExchangeClient({ initialPosts, orgId }: Props) {
               {post.photo_urls?.length > 0 ? (
                 <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", marginBottom: "0.5rem" }}>
                   {post.photo_urls.map((url) => (
-                    <img
+                    <Image
                       key={url}
                       src={url}
                       alt=""
+                      width={60}
+                      height={60}
                       style={{
-                        width: "60px",
-                        height: "60px",
                         objectFit: "cover",
                         borderRadius: "5px",
                         border: "1px solid var(--border)",

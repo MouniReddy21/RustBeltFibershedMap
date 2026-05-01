@@ -231,7 +231,7 @@ export async function PATCH(request: Request) {
 
   const { data: existing, error: existingError } = await admin
     .from("organizations")
-    .select("id, full_name, business_name, short_bio, city, state, zip, phone, website, instagram, producer_type, consent, public_contact, location_privacy_level")
+    .select("id, full_name, business_name, short_bio, city, state, zip, phone, website, instagram, producer_type, consent, public_contact, location_privacy_level, status")
     .eq("auth_user_id", user.id)
     .maybeSingle();
 

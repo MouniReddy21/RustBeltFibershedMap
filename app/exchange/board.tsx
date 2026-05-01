@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 
 type PostOrg = {
@@ -156,12 +157,12 @@ export default function ExchangeBoard({ posts }: { posts: Post[] }) {
                       style={{ padding: 0, background: "none", border: "none", cursor: "pointer" }}
                       aria-label="View photo"
                     >
-                      <img
+                      <Image
                         src={url}
                         alt=""
+                        width={80}
+                        height={80}
                         style={{
-                          width: "80px",
-                          height: "80px",
                           objectFit: "cover",
                           borderRadius: "6px",
                           border: "1px solid var(--border)",
@@ -339,10 +340,12 @@ export default function ExchangeBoard({ posts }: { posts: Post[] }) {
           }}
           onClick={() => setLightbox(null)}
         >
-          <img
+          <Image
             src={lightbox}
             alt=""
-            style={{ maxWidth: "100%", maxHeight: "90vh", borderRadius: "8px", objectFit: "contain" }}
+            width={1200}
+            height={900}
+            style={{ maxWidth: "100%", maxHeight: "90vh", borderRadius: "8px", objectFit: "contain", width: "auto", height: "auto" }}
           />
         </div>
       ) : null}
